@@ -1,0 +1,291 @@
+---
+title: "S&DS 230 Final Project: How Racial Composition of a State Influences Hate Crimes"
+author: "Vivian Vasquez"
+date: "12/8/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+$\\$
+
+## Discussants:
+
+Maimuna Majumder. (2017) FiveThirtyEight. Higher Rates of Hate Crimes are Tied to Income Inequality. From https://fivethirtyeight.com/features/higher-rates-of-hate-crimes-are-tied-to-income-inequality/
+
+$\\$
+
+## Introduction 
+
+In “Defending Turf: Racial Demographics and Hate Crimes against Blacks and Whites'' in the Social Forces Research Journal, the journal contends that racial composition of a community influences antiblack hate crimes. In this journal article, they posit that racial threat, namely the notion that the black minority will encroach upon the white majority, affects the frequency of hate crimes in a particular region. 
+
+Given that across the United States, the issue of racially motivated hate crimes perpetrated against Black people has become an issue prioritized by President-elect Joe Biden as well as by the average American citizen, with an estimated 10 percent of the US population who reported to have protested for the Black Lives Matter movement during the summer of 2020, understanding what factors influence hate crimes in specific regions is a consideration relevant to US policy making as well as to predicting how to mitigate the risk of hate crimes generally and save lives. 
+ 
+Utilizing data from FiveThirty Eight, this paper proposes to analyze the relationship between the frequency of hate crimes and various factors such as population of state that voted for Trump, population of state that is white, share of state that is white and impoverished,  and income inequality of a particular state. A FiveThirty Eight Article "Higher Rates of Hate Crimes are Tied to Income Inequality"  served as the basis for this data exploration. 
+
+
+
+
+
+
+   
+$\\$   
+   
+    
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+install.packages('fivethirtyeightdata', 
+repos = 'https://fivethirtyeightdata.github.io/drat/', type = 'source')
+library(fivethirtyeight)
+library(fivethirtyeightdata)
+#This makes sure the code is wrapped to fit when it creates a pdf
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(car)
+opts_chunk$set(tidy.opts=list(width.cutoff=60))
+```
+```{r}
+#loading the data
+hate_crime <- fivethirtyeight::hate_crimes
+```
+
+## Results
+
+
+
+$\\$
+    
+
+
+### Data wrangling: Making the data conducive to Further Analysis
+
+
+```{r}
+#Reshaping the data to only what we need
+new_hate_crime <- hate_crime%>%
+  mutate(share_white = 1 - share_non_white)%>%
+  select(state, share_white, share_vote_trump, share_white_poverty, gini_index, 
+  avg_hatecrimes_per_100k_fbi)%>%
+  na.omit()%>%
+  droplevels()
+```
+Here we removed the extraneous variables and only kept variables we were immediately interested in studying to find if stereotypical assumptions about how the racial composition of a state along with other variables like the share of white residents living in poverty as of 2015 and the Gini Index (measure of statistical dispersion that represents wealth inequality within a group of people). We also removed cases with missing variables. In particular, we removed Hawaii because it did not contain average hate crime data.
+
+Now that we've reshaped our data, we are going to run some initial linear regression tests on it. In the initial code below, we start with taking the least squares regression between our independent variable and another primary variable and are trying to what variable primarily influences hate crimes per 100k. We will use an alpha value of 0.05.
+
+## Simple Linear Regression
+$\\$
+
+```{r}
+#Using p-values to evaluate which effect is primary
+lm_fit_pov <- lm(avg_hatecrimes_per_100k_fbi ~ share_white_poverty, data = new_hate_crime)
+summary(lm_fit_pov)$coefficients
+summary(lm_fit_pov)$r.squared
+
+lm_fit_white<- lm(avg_hatecrimes_per_100k_fbi ~ share_white, data = new_hate_crime)
+summary(lm_fit_white)$coefficients
+summary(lm_fit_white)$r.squared
+
+lm_fit_trump <- lm(avg_hatecrimes_per_100k_fbi ~ share_vote_trump, data = new_hate_crime)
+summary(lm_fit_trump)$coefficients
+summary(lm_fit_trump)$r.squared
+
+lm_fit_gini <- lm(avg_hatecrimes_per_100k_fbi ~ gini_index, data = new_hate_crime)
+summary(lm_fit_gini)$coefficients
+summary(lm_fit_gini)$r.squared
+
+```
+The share of individuals in a particular state who voted for Trump seems to cover the most variability with an r squared value of 0.25. The p value of share of population that is white is greater than 0.05 so we can assume that this is not a statistically significant variable alone.
+
+
+## Visualize the data
+
+
+```{r}
+#Visualizing the Data
+plot(new_hate_crime$share_vote_trump, new_hate_crime$avg_hatecrimes_per_100k_fbi,
+xlab = "Share of Population that Voted for Trump", 
+ylab = "Avg  Annual Hate Crimes per 100k People", main = "Average Hate Crimes vs. Trump Votes")
+abline(lm_fit_trump, col = "red")
+
+par(mfrow = c(1,2))
+#Checking for Regression diagnostics before proceeding
+##Normality
+qqPlot(lm_fit_trump, col = "red", main = "QQPlot for Trump Votes Model", )
+
+##Homoskedasticity and linearity
+plot(lm_fit_trump$fitted.values, lm_fit_trump$residuals,
+     xlab = "Fitted Values", ylab = "Residuals",
+     main = "Fitted Values vs. Residuals.")
+abline(h = 0)
+```
+From the scatterplot of Average Hate Crimes vs Trump votes, we notice that there is an outlier at approximately (0.7, 11). The scatterplot is perplexing because our societal beliefs would tell us that increasing the share of the population that votes for Trump would decrease the rate of annual hate crimes. Now we will remove the outlier to see the influence of the outlier on which variable seems to influence average annual hate crime cases the most. 
+
+
+
+Mostly all of the values fall on the diagonal of the QQPlot so the residuals seem normally distributed, meaning that the regression diagnostic of normality is fulfilled.  The requirement for linearity is met since there is no non linear pattern within our data.We know this because when looking a the plot, there does not seem to be any pattern or trends and the residuals seem to be randomnly distributed above and below the y axis. While the residuals are more spread out for smaller values, there is not too much heteroscedasticity so the requirement for homoscedasticity is met. Independence might not be fulfilled because events from another state might affect the hate crime outcomes of other states, but since these linear regression tests are still robust, we proceed.
+
+```{r}
+#Removing the outlier
+new_hate_crime2 <- new_hate_crime%>%
+  filter(!state == "District of Columbia")
+
+#Rechecking our regression analyses and replotting our data
+lm_fit_pov2 <- lm(avg_hatecrimes_per_100k_fbi ~ share_white_poverty, data = new_hate_crime2)
+summary(lm_fit_pov2)$coefficients
+summary(lm_fit_pov2)$r.squared
+
+lm_fit_white2 <- lm(avg_hatecrimes_per_100k_fbi ~ share_white, data = new_hate_crime2)
+summary(lm_fit_white2)$coefficients
+summary(lm_fit_white2)$r.squared
+
+lm_fit_trump2 <- lm(avg_hatecrimes_per_100k_fbi ~ share_vote_trump, data = new_hate_crime2)
+summary(lm_fit_trump2)$coefficients
+summary(lm_fit_trump2)$r.squared
+
+lm_fit_gini2 <- lm(avg_hatecrimes_per_100k_fbi ~ gini_index, data = new_hate_crime2)
+summary(lm_fit_gini2)$coefficients
+summary(lm_fit_gini2)$r.squared
+
+```
+With the outlier extracted, none of the effects are statistically significant on their own anymore. Also the substantially lower r-values demonstrate that  variability explained  by each variable has reduced drastically. We wonder if the interaction effects between variables would perhaps yield more statistically significant p-values and higher r squared values with or without the outlier. 
+
+## Visualize the Data (Excluding Outlier)
+
+```{r}
+par(mfrow = c(1,2))
+#Re-Checking for Regression diagnostics before proceeding
+##Normality
+qqPlot(lm_fit_trump2, col = "red", main = "QQPlot for Trump Votes Model(2)")
+
+##Homoskedasticity and linearity
+plot(lm_fit_trump2$fitted.values, lm_fit_trump2$residuals, 
+     xlab = "Fitted Values",
+     ylab = "Residuals", main = "Fitted Values vs. Residuals(2)")
+abline(h = 0)
+```
+
+Again, the regression diagnostics are fulfilled: the data seems normal since the QQPlot seems to match the diagonal; linearity seems to be met since there is no non-linear pattern in the data; homoscedasticity seems to be met since hile the residuals are more spread out for smaller values. Independence still might not be fulfilled for the reasons mentioned earlier. 
+
+
+### Analysis:  Using multiple linear regression models  to observe the interaction between variables (including the outlier)
+```{r}
+#Interaction models(still including the outlier)
+##With Gini index
+lm_fit_trump_gini <- lm(avg_hatecrimes_per_100k_fbi ~ share_vote_trump + gini_index +
+ share_vote_trump*gini_index, data = new_hate_crime)
+summary_trump_gini <- summary(lm_fit_trump_gini)
+
+summary_trump_gini$r.squared
+
+##With Share of population that is white
+lm_fit_trump_white <- lm(avg_hatecrimes_per_100k_fbi ~ 
+ share_vote_trump + share_white + 
+share_vote_trump*share_white, data = new_hate_crime)
+summary_trump_white <- summary(lm_fit_trump_white)
+
+summary_trump_white$r.squared
+
+##With share of white population living in poverty
+lm_fit_trump_pov <- lm(avg_hatecrimes_per_100k_fbi ~ share_vote_trump + share_white_poverty + share_vote_trump*share_white_poverty,  data = new_hate_crime)
+summary_trump_pov <- summary(lm_fit_trump_pov)
+
+summary_trump_pov$r.squared
+
+##With all the 3 variables
+lm_fit_all <- lm(avg_hatecrimes_per_100k_fbi ~ share_vote_trump
+  + share_white + gini_index +
+ share_white_poverty + share_vote_trump*share_white*gini_index*share_white_poverty,
+ data = new_hate_crime)
+summary_all <- summary(lm_fit_all)
+summary_all$r.squared
+
+```
+Most of the double-interactions (using multiple coeficients) seem to increase variability and are also statistically significant (see appendix for Coefficients and p values of less than 0.05). However, the multiple regression model that accounts for all of the variables has a p-value of greater than 0.05 and is not statistically significant. 
+
+### Analysis:  Using multiple linear regression models  to observe the interaction between variables (excluding the outlier)
+```{r}
+#Interaction models (without the outlier)
+##With gini index
+lm_fit_trump_gini2 <- lm(avg_hatecrimes_per_100k_fbi ~ 
+share_vote_trump + gini_index + share_vote_trump*gini_index,
+data = new_hate_crime2)
+summary_trump_gini2 <- summary(lm_fit_trump_gini2)
+summary_trump_gini2$r.squared
+
+##With share of population that is white
+lm_fit_trump_white2 <- lm(avg_hatecrimes_per_100k_fbi
+ ~ share_vote_trump + share_white +
+share_vote_trump*share_white, data = new_hate_crime2)
+summary_trump_white2 <- summary(lm_fit_trump_white2)
+summary_trump_white2$r.squared
+
+##With share of white residents living in poverty
+lm_fit_trump_pov2 <- lm(avg_hatecrimes_per_100k_fbi ~
+share_vote_trump + share_white_poverty + 
+share_vote_trump*share_white_poverty,  data = new_hate_crime2)
+summary_trump_pov2 <- summary(lm_fit_trump_pov2)
+summary_trump_pov2$r.squared
+
+##With share of all the 3 variables
+lm_fit_all2 <- lm(avg_hatecrimes_per_100k_fbi ~ 
+share_vote_trump + share_white +
+gini_index + share_white_poverty +
+share_vote_trump*share_white*gini_index*share_white_poverty, data = new_hate_crime2)
+summary_all2 <- summary(lm_fit_all2)
+summary_all2$r.squared
+
+```
+
+### Conclusion 
+
+We were using this data set to find if racial composition, or the interaction between racial composition and other variables like GINI index (income inequality), share of state that voted for Trump, and share of white poverty in the state in relation to average hate crimes per 100k people.  
+
+First, we ran a simple linear regression model and found that the variable that explained most of the variability in average hate crimes on its own was what percentage of the state voted Trump in 2015. However, once we extracted the outlier of D.C, none of the variables were statistically significant on their own. Seeing that this was the case, we made multiple linear regression modes  with and without the outlier and found that with the outlier included, the interaction between share of Trump voters and share of population that is white seemed to explain the most variability  with an r-squared value of 0.54. Also, the linear regression model with all of the coefficients (GINI, share of Trump voters, white poverty) increased the total sum of squares r-squared value with an r-squared value of 0.678. Still, the p-value for the linear regression model with all of the variables is 0.5,  meaning that the model is not statistically significant. From this we can infer that the model including Trump voters and white population coefficients would be best (if we were to include the outlier). However, once we fit a multiple regression model without the outlier, we found that all of the p-values were greater than 0.05 and none of the models using more than one variable seemed to explain much of the hate crime data since the r squared values lowered substantially. 
+
+
+Taking linear regression models with the outlier seemed to confirm that the likelihood of hate crime incidences increases in states with a higher share of white people (racial composition is predominantly white) coupled with a higher share of Trump voters and not necessarily a higher share of white people in a state alone. Still, this finding seems to be driven by the outlier of DC since once the outlier is taken out, the variability described by the interaction between racial composition and share of Trump voters decreased from around 54% to 15% {and the p value was still greater than 0.05 so the interaction between racial composition and Trump voters without the outlier is not statistically significant}.
+
+For further analysis, we would explore why the societal stereotype that the racial composition of a state coupled with the share of Trump voters  in the state influences hate crimes does not seem to hold when we remove DC from the data set. In the future it might be interesting to  make a box plot of how predominantly white areas of DC that voted for Trump compare with predominantly white areas of DC that have less individuals who voted for Trump in terms of likelihood of experiencing a hate crime as a Black person. Also, it would be useful to run a hypothesis test for proportion to see the likelihood of experiencing a hate crime for being a person of color, LGBTQ, or a woman is equal in DC. 
+
+### Reflection
+
+The most challenging part of the project was finding a data set that was both compelling for what we were interested in personally but that worked well with what we had learned. Initially we explored data on police killings in the United States based on race/ethnicity composition in 2015, college education rates, poverty rates, and unemployment rates in the area where the killings took place. This took about 5 hours until we had difficulty running tests that would be insightful as the data given on race and ethnicity corresponded to particular names of individuals and did not give us an opportunity to do analysis on rates of police killings as related to race and ethnicity. Although the data was based on census data, it did not give an in depth account of all police killings during 2015. Also the variables in the data set did not account for the poverty or education level of an individual but instead the poverty level and education level of the surrounding area, which is not necessarily what we were trying to prove. What went well with the project was that once we found our hate crimes data set, we were able to work collaboratively on a topic we both cared about and check in with one another as opposed to the process of working in solitary on a pset which can sometimes be less exciting and lonesome. One thing that we ended up not including in the write up was a choropleth map of hate crimes based on state since we ran out of space. We spent approximately sixteen hours total working on the project. 
+
+
+
+### Appendix
+
+Since the data that gave us the p values of the coefficients of the linear regression models was extensive, we put it in the appendix. Still, knowing whether the variables were statistically significant or not with or without the outlier and with a simple linear regression or multiple linear regression interaction models was very relevant to our conclusion.
+
+
+```{r}
+
+
+#Interaction models(still including the outlier)
+##With Gini index
+summary_trump_gini$coefficients
+##With Share of population that is white
+summary_trump_white$coefficients
+##With share of white population living in poverty
+summary_trump_pov$coefficients
+##With all the 3 variables
+summary_all$coefficients
+
+#Interaction models (without the outlier)
+##With gini index
+summary_trump_gini2$coefficients
+##With share of population that is white
+summary_trump_white2$coefficients
+##With share of white residents living in poverty
+summary_trump_pov2$coefficients
+##With share of all the 3 variables
+summary_all2$coefficients
+```
+
+
+
